@@ -1,19 +1,78 @@
+const { ipcMain } = require("electron");
 const { app, BrowserWindow } = require("electron/main");
 const path = require("node:path");
+const { default: puppeteer } = require("puppeteer");
 
 function createWindow() {
   const win = new BrowserWindow({
-    titleBarStyle: 'hidden',
-    titleBarOverlay: true,
     width: 800,
     height: 600,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
+      nodeIntegration: true,
+      contextIsolation: false,
     },
   });
-
-  win.loadFile("index.html");
+  mainWindow.loadFile("index.html");
 }
+
+app.on("ready", createWindow);
+
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
+    app.quit();
+  }
+});
+
+app.on("activate", () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
+});
+
+ipcMain.on("login-tiktok", async () => {
+  const browser = await puppeteer.launch({ headless: false });
+  const page = await browser.newPage();
+  await page.goto("https://www.tiktok.com");
+
+  try {
+    await page.waitForSelector('input[name="email"]', { visible: true });
+    await page.type('input[name="email"]', email);
+    await page.waitForSelector('input[name="password"]', { visible: true });
+    await page.type('input[name="password"]', password);
+
+    await Promise.all([
+      page.click('button[type="submit"]'),
+      page.waitForNavigation({ waitUntil: "networkidle2" }),
+    ]);
+
+    if ((await page.$("selector-for-element-when-logged-in")) !== null) {
+      console.log("login suksesss");
+      await page.goto("https://www.tiktok.com");
+
+      let likePost = 0;
+      while (likePost < 10) {
+        const likeButton = await page.$$('button[data-e2e="like-icon"]');
+
+        for (const button of likeButton) {
+          if (likePost >= 10) break;
+          await button.click();
+          likePost++;
+          await page.waitForTimeout(2000);
+        }
+
+        await page.evaluate("window.scrollBy(0, window.innerHeight)");
+        await page.waitForTimeout(2000);
+      }
+    } else {
+      console.log("Login gagal");
+    }
+  } catch (error) {
+    console.error("Error:", error);
+    browser.close();
+  }
+  event.reply("login-sukses", "sukses like 10 post");
+});
 
 app.whenReady().then(() => {
   createWindow();
