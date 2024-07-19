@@ -4,7 +4,7 @@ const path = require("node:path");
 const { default: puppeteer } = require("puppeteer");
 
 function createWindow() {
-  const win = new BrowserWindow({
+  const mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
     webPreferences: {
@@ -13,6 +13,7 @@ function createWindow() {
       contextIsolation: false,
     },
   });
+
   mainWindow.loadFile("index.html");
 }
 
@@ -30,7 +31,7 @@ app.on("activate", () => {
   }
 });
 
-ipcMain.on("login-tiktok", async () => {
+ipcMain.on("login-tiktok", async (event, { email, password }) => {
   const browser = await puppeteer.launch({ headless: false });
   const page = await browser.newPage();
   await page.goto("https://www.tiktok.com");
@@ -38,6 +39,7 @@ ipcMain.on("login-tiktok", async () => {
   try {
     await page.waitForSelector('input[name="email"]', { visible: true });
     await page.type('input[name="email"]', email);
+
     await page.waitForSelector('input[name="password"]', { visible: true });
     await page.type('input[name="password"]', password);
 
@@ -47,45 +49,34 @@ ipcMain.on("login-tiktok", async () => {
     ]);
 
     if ((await page.$("selector-for-element-when-logged-in")) !== null) {
-      console.log("login suksesss");
-      await page.goto("https://www.tiktok.com");
+      console.log("Login successful");
 
-      let likePost = 0;
-      while (likePost < 10) {
-        const likeButton = await page.$$('button[data-e2e="like-icon"]');
+      await page.goto("https://www.tiktok.com/");
 
-        for (const button of likeButton) {
-          if (likePost >= 10) break;
+      let likedPosts = 0;
+      while (likedPosts < 10) {
+        const likeButtons = await page.$$('button[data-e2e="like-icon"]');
+
+        for (const button of likeButtons) {
+          if (likedPosts >= 10) break;
           await button.click();
-          likePost++;
+          likedPosts++;
           await page.waitForTimeout(2000);
         }
 
         await page.evaluate("window.scrollBy(0, window.innerHeight)");
-        await page.waitForTimeout(2000);
+        await page.waitForTimeout(3000);
       }
     } else {
-      console.log("Login gagal");
+      console.log(
+        "Login failed, please check your credentials or handle captcha/OTP manually."
+      );
     }
   } catch (error) {
-    console.error("Error:", error);
-    browser.close();
+    console.error("Error during login process:", error);
+  } finally {
+    await browser.close();
   }
-  event.reply("login-sukses", "sukses like 10 post");
-});
 
-app.whenReady().then(() => {
-  createWindow();
-
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
-});
-
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
+  event.reply("login-success", "Successfully liked 10 posts");
 });

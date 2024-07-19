@@ -10,21 +10,34 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <div class="container">
-    <h1>Electron Puppeteer TikTok</h1>
+    <h1>TikTok Automatic</h1>
     <div>
       <img src="asset/TikTok_logo.png" alt="logo tiktok" />
     </div>
     <div>
-      <form action="loginForm">
-        <label for="email">Email :</label>
+      <form id="loginForm">
+        <label for="email">Email:</label>
         <input type="text" id="email" name="email" required />
-        <label for="password">Password :</label>
+        <label for="password">Password:</label>
         <input type="password" id="password" name="password" required />
         <button type="submit">Start</button>
       </form>
     </div>
-  </div>
+  </div> <script>
+    const { ipcRenderer } = require("electron");
 
-  
+    document
+      .getElementById("loginForm")
+      .addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const email = document.getElementById("email").value;
+        const password = document.getElementById("password").value;
+        ipcRenderer.send("login-tiktok", { email, password });
+
+        ipcRenderer.on("login-success", (event, message) => {
+          alert(message);
+        });
+      });
+  </script>
+
 </html>
-
