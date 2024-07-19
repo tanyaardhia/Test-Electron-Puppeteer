@@ -6,9 +6,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const email = document.getElementById("email").value;
     const password = document.getElementById("password").value;
     ipcRenderer.send("login-tiktok", { email, password });
-  });
-
-  ipcRenderer.on("login-success", (event, message) => {
+  }); ipcRenderer.on("login-success", (event, message) => {
     alert(message);
   });
 });

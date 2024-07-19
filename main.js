@@ -69,14 +69,13 @@ ipcMain.on("login-tiktok", async (event, { email, password }) => {
       }
     } else {
       console.log(
-        "Login failed, please check your credentials or handle captcha/OTP manually."
+        "Login failed"
       );
     }
   } catch (error) {
-    console.error("Error during login process:", error);
+    console.error("Error>>", error);
   } finally {
     await browser.close();
   }
-
   event.reply("login-success", "Successfully liked 10 posts");
 });
