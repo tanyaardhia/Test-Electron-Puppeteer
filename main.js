@@ -3,6 +3,8 @@ const path = require("node:path");
 
 function createWindow() {
   const win = new BrowserWindow({
+    titleBarStyle: 'hidden',
+    titleBarOverlay: true,
     width: 800,
     height: 600,
     webPreferences: {
