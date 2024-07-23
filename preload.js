@@ -1,5 +1,6 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer } = require("electron");
 
-contextBridge.exposeInMainWorld('electronAPI', {
-    sendLogin: (credentials) => ipcRenderer.send('login-tiktok', credentials)
+contextBridge.exposeInMainWorld("api", {
+  loginTikTok: (credentials) => ipcRenderer.send("login-tiktok", credentials),
+  onLoginSuccess: (callback) => ipcRenderer.on("login-success", callback),
 });

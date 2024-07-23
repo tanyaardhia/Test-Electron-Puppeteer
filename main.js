@@ -1,7 +1,11 @@
 const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
-const puppeteer = require("puppeteer");
+const puppeteer = require("puppeteer-extra");
+const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+const fs = require("fs");
 require("dotenv").config();
+
+puppeteer.use(StealthPlugin());
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -11,13 +15,15 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      // `worldSafeExecuteJavaScript` must be true for `contextBridge` to work properly
+      worldSafeExecuteJavaScript: true,
     },
   });
 
   mainWindow.loadFile("index.html");
 }
 
-app.on("ready", createWindow);
+app.whenReady().then(createWindow);
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
@@ -33,77 +39,133 @@ app.on("activate", () => {
 
 ipcMain.on("login-tiktok", async (event, credentials) => {
   const { email, password } = credentials;
-
   const browser = await puppeteer.launch({ headless: false });
   const page = await browser.newPage();
   await page.setUserAgent(
-    "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36 Edge/18.19042"
   );
-  await page.goto("https://www.tiktok.com/login/phone-or-email/email", {
-    waitUntil: "networkidle2",
-    timeout: 60000,
-  });
+
+  const cookiesPath = "cookies.json";
+  if (fs.existsSync(cookiesPath)) {
+    const cookies = JSON.parse(fs.readFileSync(cookiesPath));
+    await page.setCookie(...cookies);
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
 
   try {
-    console.log("Navigae login page");
-    console.log("typing username");
-    await page.waitForSelector(".tiktok-11to27l-InputContainer.etcs7ny1", {
-      visible: true,
+    console.log("Navigating to login page...");
+    await page.goto("https://www.tiktok.com/login/phone-or-email/email", {
+      waitUntil: "networkidle2",
       timeout: 60000,
     });
-    await page.type(".tiktok-11to27l-InputContainer.etcs7ny1", email, {
-      delay: 400,
+
+    let isLoggedIn = false;
+    const loggedIn = await page.evaluate(() => {
+      return (
+        document.querySelector("selector-for-element-when-logged-in") !== null
+      );
     });
 
-    console.log("typing password");
-    await page.waitForSelector("input[type='password']", {
-      visible: true,
-      timeout: 60000,
-    });
-    await page.type("input[type='password']", password, { delay: 400 });
+    if (!loggedIn) {
+      console.log("Navigating login page");
+      console.log("Typing username");
+      await page.waitForSelector(".tiktok-11to27l-InputContainer.etcs7ny1", {
+        visible: true,
+        timeout: 60000,
+      });
+      await page.type(".tiktok-11to27l-InputContainer.etcs7ny1", email, {
+        delay: 400,
+      });
 
-    console.log("login form");
-    await Promise.all([
-      page.click('#loginContainer button[type="submit"]'),
-      page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 }),
-    ]);
+      console.log("Typing password");
+      await page.waitForSelector("input[type='password']", {
+        visible: true,
+        timeout: 60000,
+      });
+      await page.type("input[type='password']", password, { delay: 400 });
 
-    console.log("login successful");
-    const isLoggedIn =
-      (await page.$("selector-for-element-when-logged-in")) !== null;
-    console.log(`login status ${isLoggedIn ? "Logged In" : "Not Logged In"}`);
+      console.log("Submitting login form");
+      await Promise.all([
+        page.click('#loginContainer button[type="submit"]'),
+        page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 }),
+      ]);
+
+      console.log("Waiting for foryou page to load...");
+      await sleep(10000);
+
+      console.log("Checking login status...");
+      isLoggedIn =
+        (await page.$("selector-for-element-when-logged-in")) !== null;
+      console.log(
+        `Login status: ${isLoggedIn ? "Logged In" : "Not Logged In"}`
+      );
+
+      if (isLoggedIn) {
+        const cookies = await page.cookies();
+        fs.writeFileSync(cookiesPath, JSON.stringify(cookies, null, 2));
+      } else {
+        console.log("Login failed");
+        return;
+      }
+    } else {
+      console.log("Already logged in");
+      isLoggedIn = true;
+    }
 
     if (isLoggedIn) {
-      await page.waitForTimeout(10000);
+      console.log("Navigating to foryou page...");
+      await page.goto("https://www.tiktok.com/foryou", {
+        waitUntil: "networkidle2",
+        timeout: 60000,
+      });
 
+      console.log("Waiting for foryou page to load...");
+      await page.waitForSelector(
+        "button.css-1ok4pbl-ButtonActionItem.e1hk3hf90",
+        {
+          visible: true,
+          timeout: 60000,
+        }
+      );
+
+      const endTime = Date.now() + 5 * 60 * 1000;
       let likedPosts = 0;
-      while (likedPosts < 10) {
-        const likeButtons = await page.$$('button[data-e2e="like-icon"]');
+      while (Date.now() < endTime && likedPosts < 10) {
+        const likeButtons = await page.$$(
+          "button.css-1ok4pbl-ButtonActionItem.e1hk3hf90"
+        );
+
+        console.log(`Found ${likeButtons.length} like buttons`);
 
         for (const button of likeButtons) {
-          if (likedPosts >= 10) break;
-          console.log("like post");
+          if (likedPosts >= 10 || Date.now() >= endTime) break;
+          console.log("Liking post...");
           await button.click();
           likedPosts++;
-          await page.waitForTimeout(3000);
+          await sleep(3000);
         }
 
-        console.log("scrolling");
-        await page.evaluate("window.scrollBy(0, window.innerHeight)");
-        await page.waitForTimeout(5000);
+        if (Date.now() < endTime) {
+          console.log("Scrolling...");
+          await page.evaluate(() => {
+            window.scrollBy(0, window.innerHeight);
+          });
+          await sleep(5000);
+        }
       }
 
-      console.log("Successfully liked 10 posts");
+      console.log("Finished liking posts or 5 minutes elapsed");
     } else {
-      console.log(
-        "login failed"
-      );
+      console.log("Login failed");
     }
   } catch (error) {
-    console.error("error during login process:", error);
+    console.error("Error during login process:", error);
   } finally {
     await browser.close();
   }
 
-  event.reply("login-success", "Successfully liked 10 posts");
+  event.reply("login-success", "Finished liking posts or 5 minutes elapsed");
 });
