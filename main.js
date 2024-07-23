@@ -15,15 +15,13 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      // `worldSafeExecuteJavaScript` must be true for `contextBridge` to work properly
-      worldSafeExecuteJavaScript: true,
     },
   });
 
   mainWindow.loadFile("index.html");
 }
 
-app.whenReady().then(createWindow);
+app.on("ready", createWindow);
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
@@ -56,7 +54,7 @@ ipcMain.on("login-tiktok", async (event, credentials) => {
   }
 
   try {
-    console.log("Navigating to login page...");
+    console.log("navigate to login page");
     await page.goto("https://www.tiktok.com/login/phone-or-email/email", {
       waitUntil: "networkidle2",
       timeout: 60000,
@@ -64,14 +62,12 @@ ipcMain.on("login-tiktok", async (event, credentials) => {
 
     let isLoggedIn = false;
     const loggedIn = await page.evaluate(() => {
-      return (
-        document.querySelector("selector-for-element-when-logged-in") !== null
-      );
+      return document.querySelector("#main-content-homepage_hot") !== null;
     });
 
     if (!loggedIn) {
-      console.log("Navigating login page");
-      console.log("Typing username");
+      console.log("navigating login page");
+      console.log("typing email");
       await page.waitForSelector(".tiktok-11to27l-InputContainer.etcs7ny1", {
         visible: true,
         timeout: 60000,
@@ -80,25 +76,24 @@ ipcMain.on("login-tiktok", async (event, credentials) => {
         delay: 400,
       });
 
-      console.log("Typing password");
+      console.log("typing password");
       await page.waitForSelector("input[type='password']", {
         visible: true,
         timeout: 60000,
       });
       await page.type("input[type='password']", password, { delay: 400 });
 
-      console.log("Submitting login form");
+      console.log("press button login");
       await Promise.all([
         page.click('#loginContainer button[type="submit"]'),
         page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 }),
       ]);
 
-      console.log("Waiting for foryou page to load...");
+      console.log("fyp to loading");
       await sleep(10000);
 
-      console.log("Checking login status...");
-      isLoggedIn =
-        (await page.$("selector-for-element-when-logged-in")) !== null;
+      console.log("check login status");
+      isLoggedIn = (await page.$("#main-content-homepage_hot")) !== null;
       console.log(
         `Login status: ${isLoggedIn ? "Logged In" : "Not Logged In"}`
       );
@@ -107,29 +102,23 @@ ipcMain.on("login-tiktok", async (event, credentials) => {
         const cookies = await page.cookies();
         fs.writeFileSync(cookiesPath, JSON.stringify(cookies, null, 2));
       } else {
-        console.log("Login failed");
+        console.log("login failed");
         return;
       }
     } else {
-      console.log("Already logged in");
+      console.log("already logged in");
       isLoggedIn = true;
     }
 
     if (isLoggedIn) {
-      console.log("Navigating to foryou page...");
+      console.log("navigate to fyp");
       await page.goto("https://www.tiktok.com/foryou", {
         waitUntil: "networkidle2",
         timeout: 60000,
       });
 
-      console.log("Waiting for foryou page to load...");
-      await page.waitForSelector(
-        "button.css-1ok4pbl-ButtonActionItem.e1hk3hf90",
-        {
-          visible: true,
-          timeout: 60000,
-        }
-      );
+      console.log("waiting for fyp to load");
+      await sleep(10000); 
 
       const endTime = Date.now() + 5 * 60 * 1000;
       let likedPosts = 0;
@@ -142,27 +131,27 @@ ipcMain.on("login-tiktok", async (event, credentials) => {
 
         for (const button of likeButtons) {
           if (likedPosts >= 10 || Date.now() >= endTime) break;
-          console.log("Liking post...");
+          console.log("liking post...");
           await button.click();
           likedPosts++;
-          await sleep(3000);
+          await sleep(3000); 
         }
 
         if (Date.now() < endTime) {
-          console.log("Scrolling...");
+          console.log("scrolling");
           await page.evaluate(() => {
             window.scrollBy(0, window.innerHeight);
           });
-          await sleep(5000);
+          await sleep(5000); 
         }
       }
 
-      console.log("Finished liking posts or 5 minutes elapsed");
+      console.log("finished liking postss");
     } else {
-      console.log("Login failed");
+      console.log("login failed");
     }
   } catch (error) {
-    console.error("Error during login process:", error);
+    console.error("error >> ", error);
   } finally {
     await browser.close();
   }
